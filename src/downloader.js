@@ -3,20 +3,12 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { filenameFromResponse } = require('./util');
 
 const DEFAULT_DIR = path.join(__dirname, '..', 'downloads');
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-
-function filenameFromResponse(res, urlObj, fallback) {
-  const cd = res.headers['content-disposition'];
-  if (cd) {
-    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
-    if (match) return decodeURIComponent(match[1]);
-  }
-  return path.basename(urlObj.pathname) || fallback;
 }
 
 class Downloader extends EventEmitter {

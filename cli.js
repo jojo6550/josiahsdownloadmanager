@@ -1,22 +1,6 @@
 #!/usr/bin/env node
 const downloader = require('./src/downloader');
-
-function parseArgs(argv) {
-  const args = { url: null, output: null, quiet: false };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '-o' || a === '--output') {
-      args.output = argv[++i];
-    } else if (a === '-q' || a === '--quiet') {
-      args.quiet = true;
-    } else if (a === '-h' || a === '--help') {
-      args.help = true;
-    } else if (!args.url) {
-      args.url = a;
-    }
-  }
-  return args;
-}
+const { parseArgs, formatBytes, renderBar } = require('./src/util');
 
 function printHelp() {
   console.log(`Usage: node cli.js <url> [options]
@@ -31,18 +15,6 @@ Examples:
   node cli.js https://example.com/video.mp4 -o ~/Videos/
   node cli.js https://example.com/file.zip -o ./myfile.zip
 `);
-}
-
-function formatBytes(n) {
-  if (n < 1024) return `${n}B`;
-  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)}KB`;
-  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)}MB`;
-  return `${(n / 1024 ** 3).toFixed(2)}GB`;
-}
-
-function renderBar(percent, width = 30) {
-  const filled = Math.round((percent / 100) * width);
-  return '[' + '='.repeat(filled) + ' '.repeat(width - filled) + ']';
 }
 
 function main() {

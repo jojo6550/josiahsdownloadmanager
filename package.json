@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "electron .",
-    "dl": "node cli.js"
+    "dl": "node cli.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "devDependencies": {
     "electron": "^30.0.0"
