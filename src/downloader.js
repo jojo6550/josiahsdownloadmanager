@@ -4,10 +4,19 @@ const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 
-const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
+const DEFAULT_DIR = path.join(__dirname, '..', 'downloads');
 
-if (!fs.existsSync(DOWNLOADS_DIR)) {
-  fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function filenameFromResponse(res, urlObj, fallback) {
+  const cd = res.headers['content-disposition'];
+  if (cd) {
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    if (match) return decodeURIComponent(match[1]);
+  }
+  return path.basename(urlObj.pathname) || fallback;
 }
 
 class Downloader extends EventEmitter {
@@ -16,49 +25,75 @@ class Downloader extends EventEmitter {
     this.downloads = new Map();
   }
 
-  startDownload(url, id) {
+  startDownload(url, id, options = {}) {
     const parsed = new URL(url);
     const protocol = parsed.protocol === 'https:' ? https : http;
-    const filename = path.basename(parsed.pathname) || `download_${id}`;
-    const dest = path.join(DOWNLOADS_DIR, filename);
-
-    const fileStream = fs.createWriteStream(dest);
+    const fallback = `download_${id}`;
+    let dest;
+    let filename;
     let received = 0;
     let total = 0;
     let req = null;
 
-    const request = () => {
-      req = protocol.get(url, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return this.startDownload(res.headers.location, id);
+    const onResponse = (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        const next = new URL(res.headers.location, url).toString();
+        return this.startDownload(next, id, options);
+      }
+
+      if (res.statusCode >= 400) {
+        this.emit('status', { id, status: 'error', error: `HTTP ${res.statusCode}` });
+        return;
+      }
+
+      filename = filenameFromResponse(res, parsed, fallback);
+
+      if (options.outputPath) {
+        const op = options.outputPath;
+        const isDir = op.endsWith(path.sep) || op.endsWith('/') || (fs.existsSync(op) && fs.statSync(op).isDirectory());
+        if (isDir) {
+          ensureDir(op);
+          dest = path.join(op, filename);
+        } else {
+          ensureDir(path.dirname(op));
+          dest = op;
+          filename = path.basename(op);
         }
+      } else {
+        ensureDir(DEFAULT_DIR);
+        dest = path.join(DEFAULT_DIR, filename);
+      }
 
-        total = parseInt(res.headers['content-length'] || '0', 10);
+      const fileStream = fs.createWriteStream(dest);
+      total = parseInt(res.headers['content-length'] || '0', 10);
 
-        this.downloads.set(id, { req, fileStream, paused: false, dest, filename });
-        this.emit('status', { id, status: 'downloading', filename });
+      this.downloads.set(id, { req, fileStream, paused: false, dest, filename, url });
+      this.emit('status', { id, status: 'downloading', filename, total, dest });
 
-        res.on('data', (chunk) => {
-          received += chunk.length;
-          const percent = total ? Math.floor((received / total) * 100) : 0;
-          this.emit('progress', { id, percent, received, total, filename });
-        });
-
-        res.pipe(fileStream);
-
-        fileStream.on('finish', () => {
-          this.downloads.delete(id);
-          this.emit('status', { id, status: 'completed', filename });
-        });
+      res.on('data', (chunk) => {
+        received += chunk.length;
+        const percent = total ? Math.floor((received / total) * 100) : 0;
+        this.emit('progress', { id, percent, received, total, filename });
       });
 
-      req.on('error', (err) => {
+      res.pipe(fileStream);
+
+      fileStream.on('finish', () => {
+        this.downloads.delete(id);
+        this.emit('status', { id, status: 'completed', filename, dest });
+      });
+
+      fileStream.on('error', (err) => {
         this.emit('status', { id, status: 'error', filename, error: err.message });
       });
     };
 
-    request();
-    return { id, filename };
+    req = protocol.get(url, onResponse);
+    req.on('error', (err) => {
+      this.emit('status', { id, status: 'error', error: err.message });
+    });
+
+    return { id };
   }
 
   pauseDownload(id) {
@@ -73,7 +108,6 @@ class Downloader extends EventEmitter {
   resumeDownload(id) {
     const dl = this.downloads.get(id);
     if (!dl) return;
-    // Simple resume: restart from scratch (V2 will use Range requests)
     const url = dl.url;
     this.downloads.delete(id);
     if (url) this.startDownload(url, id);

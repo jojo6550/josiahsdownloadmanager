@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "Desktop download manager built with Electron",
   "main": "main.js",
+  "bin": {
+    "jdm": "./cli.js"
+  },
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dl": "node cli.js"
   },
   "devDependencies": {
     "electron": "^30.0.0"
