@@ -1,4 +1,5 @@
 const path = require('path');
+const { extFromMime } = require('./mimeTypes');
 
 function filenameFromResponse(res, urlObj, fallback) {
   const cd = res.headers['content-disposition'];
@@ -6,7 +7,15 @@ function filenameFromResponse(res, urlObj, fallback) {
     const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
     if (match) return decodeURIComponent(match[1]);
   }
-  return path.basename(urlObj.pathname) || fallback;
+
+  let name = path.basename(urlObj.pathname) || fallback;
+
+  if (!path.extname(name)) {
+    const ext = extFromMime(res.headers['content-type']);
+    if (ext) name = `${name}.${ext}`;
+  }
+
+  return name;
 }
 
 function formatBytes(n) {

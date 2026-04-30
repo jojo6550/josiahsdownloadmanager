@@ -112,3 +112,33 @@ test('filenameFromResponse: fallback when no name', () => {
   const url = new URL('https://example.com/');
   assert.equal(filenameFromResponse(res, url, 'fallback_id'), 'fallback_id');
 });
+
+test('filenameFromResponse: appends ext from Content-Type when URL has no ext', () => {
+  const res = { headers: { 'content-type': 'audio/mpeg' } };
+  const url = new URL('https://example.com/track?id=42');
+  assert.equal(filenameFromResponse(res, url, 'fb'), 'track.mp3');
+});
+
+test('filenameFromResponse: appends ext to fallback', () => {
+  const res = { headers: { 'content-type': 'video/mp4' } };
+  const url = new URL('https://example.com/');
+  assert.equal(filenameFromResponse(res, url, 'download_1'), 'download_1.mp4');
+});
+
+test('filenameFromResponse: keeps existing ext, ignores Content-Type', () => {
+  const res = { headers: { 'content-type': 'video/mp4' } };
+  const url = new URL('https://example.com/song.mp3');
+  assert.equal(filenameFromResponse(res, url, 'fb'), 'song.mp3');
+});
+
+test('filenameFromResponse: ignores charset param in Content-Type', () => {
+  const res = { headers: { 'content-type': 'application/pdf; charset=utf-8' } };
+  const url = new URL('https://example.com/doc');
+  assert.equal(filenameFromResponse(res, url, 'fb'), 'doc.pdf');
+});
+
+test('filenameFromResponse: unknown MIME → no ext added', () => {
+  const res = { headers: { 'content-type': 'application/x-weird-thing' } };
+  const url = new URL('https://example.com/blob');
+  assert.equal(filenameFromResponse(res, url, 'fb'), 'blob');
+});
