@@ -1,5 +1,10 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
+
+if (!process.env.JDM_DOWNLOAD_DIR) {
+  process.env.JDM_DOWNLOAD_DIR = path.join(app.getPath('downloads'), 'JDM');
+}
+
 const { registerIpcHandlers } = require('./src/ipcHandlers');
 
 function createWindow() {

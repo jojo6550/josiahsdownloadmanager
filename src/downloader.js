@@ -1,11 +1,12 @@
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { filenameFromResponse } = require('./util');
 
-const DEFAULT_DIR = path.join(__dirname, '..', 'downloads');
+const DEFAULT_DIR = process.env.JDM_DOWNLOAD_DIR || path.join(os.homedir(), 'Downloads', 'JDM');
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

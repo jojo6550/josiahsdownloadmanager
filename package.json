@@ -9,9 +9,47 @@
   "scripts": {
     "start": "electron .",
     "dl": "node cli.js",
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test \"test/*.test.js\"",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "files": [
+    "main.js",
+    "preload.js",
+    "cli.js",
+    "src/**/*",
+    "renderer/**/*"
+  ],
+  "build": {
+    "appId": "com.josiah.downloadmanager",
+    "productName": "Josiah's Download Manager",
+    "files": [
+      "main.js",
+      "preload.js",
+      "cli.js",
+      "src/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Network"
+    }
   },
   "devDependencies": {
-    "electron": "^30.0.0"
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
   }
 }
