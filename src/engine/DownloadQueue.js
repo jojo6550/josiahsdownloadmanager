@@ -73,20 +73,26 @@ class DownloadQueue extends EventEmitter {
 
   /**
    * Resume a paused download.
+   * Respects maxConcurrent — if no slot is free, re-queues at front of pending.
    * @param {string} id
    */
   resume(id) {
     const job = this._jobs.get(id);
-    if (!job) return;
+    if (!job || job.status !== 'paused') return;
 
-    if (job.status === 'paused') {
-      // DownloadJob.resume() transitions paused -> queued -> downloading internally
-      // It calls start() which begins the download immediately.
-      this._activeIds.add(id);
-      job.resume();
-
-      logger.debug('DownloadQueue: job resumed', { id });
+    if (this._activeIds.size >= this.maxConcurrent) {
+      // No slot available — re-queue at front so it starts next when one opens
+      this._pendingIds.unshift(id);
+      logger.debug('DownloadQueue: job re-queued (maxConcurrent reached)', { id });
+      return;
     }
+
+    // Slot available — attach listeners and resume immediately
+    this._activeIds.add(id);
+    this._attachJobListeners(id, job);
+    job.resume().catch(() => {});
+
+    logger.debug('DownloadQueue: job resumed', { id });
   }
 
   /**
@@ -130,7 +136,55 @@ class DownloadQueue extends EventEmitter {
   // ─── Private ─────────────────────────────────────────────────────────────────
 
   /**
+   * Attach named progress/status listeners to a job.
+   * Listeners are removed when the job reaches a terminal or paused state
+   * to prevent listener leaks.
+   * @param {string} id
+   * @param {DownloadJob} job
+   * @private
+   */
+  _attachJobListeners(id, job) {
+    const onProgress = (payload) => {
+      this.emit('job:progress', { id, ...payload });
+    };
+
+    const onStatus = (payload) => {
+      this.emit('job:status', { id, ...payload });
+
+      const { status } = payload;
+      if (status === 'completed') {
+        logger.info('DownloadQueue: job completed', { id, url: job.url });
+        job.off('progress', onProgress);
+        job.off('status', onStatus);
+        this._activeIds.delete(id);
+        this._flush();
+      } else if (status === 'error') {
+        logger.error('DownloadQueue: job error', { id, url: job.url, error: job.error && job.error.message });
+        job.off('progress', onProgress);
+        job.off('status', onStatus);
+        this._activeIds.delete(id);
+        this._flush();
+      } else if (status === 'cancelled') {
+        job.off('progress', onProgress);
+        job.off('status', onStatus);
+        this._activeIds.delete(id);
+        this._flush();
+      } else if (status === 'paused') {
+        // Clean up listeners and free the slot — do NOT re-queue
+        job.off('progress', onProgress);
+        job.off('status', onStatus);
+        this._activeIds.delete(id);
+        this._flush();
+      }
+    };
+
+    job.on('progress', onProgress);
+    job.on('status', onStatus);
+  }
+
+  /**
    * Start pending jobs up to maxConcurrent.
+   * Handles both queued and paused jobs in the pending list.
    * @private
    */
   _flush() {
@@ -141,30 +195,7 @@ class DownloadQueue extends EventEmitter {
       if (!job) continue;
 
       this._activeIds.add(id);
-
-      // Forward progress events to the queue
-      job.on('progress', (payload) => {
-        this.emit('job:progress', { id, ...payload });
-      });
-
-      // Forward status events and manage active slot lifecycle
-      job.on('status', (payload) => {
-        this.emit('job:status', { id, ...payload });
-
-        const { status } = payload;
-        if (status === 'completed') {
-          logger.info('DownloadQueue: job completed', { id, url: job.url });
-          this._activeIds.delete(id);
-          this._flush();
-        } else if (status === 'error') {
-          logger.info('DownloadQueue: job error', { id, url: job.url, error: job.error && job.error.message });
-          this._activeIds.delete(id);
-          this._flush();
-        } else if (status === 'cancelled' || status === 'paused') {
-          this._activeIds.delete(id);
-          this._flush();
-        }
-      });
+      this._attachJobListeners(id, job);
 
       logger.info('DownloadQueue: job starting', { id, url: job.url });
       logger.debug('DownloadQueue: queue state after start', {
@@ -172,7 +203,11 @@ class DownloadQueue extends EventEmitter {
         active: this._activeIds.size,
       });
 
-      job.start();
+      if (job.status === 'paused') {
+        job.resume().catch(() => {});
+      } else {
+        job.start().catch(() => {});
+      }
     }
   }
 }
