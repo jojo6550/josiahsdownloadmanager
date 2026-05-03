@@ -1,12 +1,17 @@
 #!/usr/bin/env node
-const downloader = require('./src/downloader');
+'use strict';
+
+const path = require('node:path');
+const os = require('node:os');
+const fs = require('node:fs');
+const DownloadQueue = require('./src/engine/DownloadQueue');
 const { parseArgs, formatBytes, renderBar } = require('./src/util');
 
 function printHelp() {
   console.log(`Usage: node cli.js <url> [options]
 
 Options:
-  -o, --output <path>   Output file or directory (default: ./downloads/)
+  -o, --output <path>   Output file or directory (default: ~/Downloads/JDM/)
   -q, --quiet           Suppress progress bar
   -h, --help            Show help
 
@@ -17,6 +22,23 @@ Examples:
 `);
 }
 
+function resolveDest(url, outputArg) {
+  const urlBasename = path.basename(new URL(url).pathname) || `download-${Date.now()}`;
+
+  if (!outputArg) {
+    const dir = process.env.JDM_DOWNLOAD_DIR || path.join(os.homedir(), 'Downloads', 'JDM');
+    return path.join(dir, urlBasename);
+  }
+
+  // If output ends with separator or is an existing directory — use it as a dir
+  if (outputArg.endsWith('/') || outputArg.endsWith(path.sep) || fs.existsSync(outputArg) && fs.statSync(outputArg).isDirectory()) {
+    return path.join(outputArg, urlBasename);
+  }
+
+  // Otherwise treat as a full file path
+  return outputArg;
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -25,15 +47,25 @@ function main() {
     process.exit(args.url ? 0 : 1);
   }
 
-  const id = `cli_${Date.now()}`;
+  // Set download dir so Logger can initialise
+  if (!process.env.JDM_DOWNLOAD_DIR) {
+    process.env.JDM_DOWNLOAD_DIR = path.join(os.homedir(), 'Downloads', 'JDM');
+  }
+
+  const dest = resolveDest(args.url, args.output);
+
+  // Ensure destination directory exists
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+
+  const queue = new DownloadQueue({ maxConcurrent: 1 });
+
   const startedAt = Date.now();
   let lastReceived = 0;
   let lastTime = startedAt;
   let speed = 0;
 
   if (!args.quiet) {
-    downloader.on('progress', ({ id: pid, percent, received, total }) => {
-      if (pid !== id) return;
+    queue.on('job:progress', ({ percent, received, total }) => {
       const now = Date.now();
       const dt = (now - lastTime) / 1000;
       if (dt >= 0.25) {
@@ -41,30 +73,36 @@ function main() {
         lastReceived = received;
         lastTime = now;
       }
-      const sizeStr = total ? `${formatBytes(received)}/${formatBytes(total)}` : formatBytes(received);
+
+      const pct = Math.round(percent || 0);
       const speedStr = `${formatBytes(speed)}/s`;
-      process.stdout.write(`\r${renderBar(percent)} ${percent}% ${sizeStr} ${speedStr}    `);
+      const sizeStr = total
+        ? `${formatBytes(received)}/${formatBytes(total)} MB`
+        : formatBytes(received);
+
+      const etaSec = speed > 0 && total ? Math.round((total - received) / speed) : null;
+      const etaStr = etaSec !== null ? `ETA ${etaSec}s` : 'ETA --';
+
+      process.stdout.write(
+        `\r${renderBar(pct)} ${pct}% | ${speedStr} | ${etaStr} | ${sizeStr}    `
+      );
     });
   }
 
-  downloader.on('status', (s) => {
-    if (s.id !== id) return;
-    if (s.status === 'downloading') {
-      if (!args.quiet) console.log(`Downloading: ${s.filename}`);
-    } else if (s.status === 'completed') {
+  queue.on('job:status', ({ status, error }) => {
+    if (status === 'completed') {
       if (!args.quiet) {
         process.stdout.write(`\r${renderBar(100)} 100%${' '.repeat(40)}\n`);
-        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-        console.log(`Saved: ${s.dest} (${elapsed}s)`);
+        console.log(`Saved: ${dest}`);
       }
       process.exit(0);
-    } else if (s.status === 'error') {
-      console.error(`\nError: ${s.error}`);
+    } else if (status === 'error') {
+      process.stderr.write(`\nError: ${error || 'unknown error'}\n`);
       process.exit(1);
     }
   });
 
-  downloader.startDownload(args.url, id, { outputPath: args.output });
+  queue.add(args.url, dest);
 }
 
 main();
