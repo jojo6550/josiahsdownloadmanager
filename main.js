@@ -1,9 +1,17 @@
+'use strict';
+
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
+// Set download dir BEFORE requiring ipcHandlers (Logger reads it at first write)
 if (!process.env.JDM_DOWNLOAD_DIR) {
-  process.env.JDM_DOWNLOAD_DIR = path.join(app.getPath('downloads'), 'JDM');
+  process.env.JDM_DOWNLOAD_DIR = path.join(os.homedir(), 'Downloads', 'JDM');
 }
+
+// Ensure the downloads directory exists
+fs.mkdirSync(process.env.JDM_DOWNLOAD_DIR, { recursive: true });
 
 const { registerIpcHandlers } = require('./src/ipcHandlers');
 

@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dl": "node cli.js",
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node --test \"test/**/*.test.js\"",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",

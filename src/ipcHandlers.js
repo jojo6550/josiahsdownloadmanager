@@ -1,28 +1,58 @@
-const { ipcMain, BrowserWindow } = require('electron');
-const downloader = require('./downloader');
+'use strict';
 
-function broadcast(channel, data) {
-  BrowserWindow.getAllWindows().forEach((win) => {
-    win.webContents.send(channel, data);
+const { ipcMain, BrowserWindow, shell } = require('electron');
+const path = require('node:path');
+const DownloadQueue = require('./engine/DownloadQueue');
+const logger = require('./logger/Logger');
+
+const queue = new DownloadQueue();
+
+function broadcast(channel, payload) {
+  BrowserWindow.getAllWindows().forEach(w => {
+    if (!w.isDestroyed()) w.webContents.send(channel, payload);
   });
 }
 
+let _registered = false;
 function registerIpcHandlers() {
-  downloader.on('progress', (data) => broadcast('download:progress', data));
-  downloader.on('status', (data) => broadcast('download:status', data));
-
-  ipcMain.handle('download:start', (_event, url) => {
-    const id = Date.now().toString();
-    return downloader.startDownload(url, id);
+  if (_registered) return;
+  _registered = true;
+  // Invoke handlers (renderer → main, returns value)
+  ipcMain.handle('download:start', async (event, { url } = {}) => {
+    if (typeof url !== 'string') throw new Error('url must be a string');
+    let parsed;
+    try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Only http/https URLs are supported');
+    }
+    let filename = path.basename(parsed.pathname).replace(/[/\\]/g, '') || `download-${Date.now()}`;
+    const dest = path.join(process.env.JDM_DOWNLOAD_DIR, filename);
+    if (!dest.startsWith(process.env.JDM_DOWNLOAD_DIR + path.sep) && dest !== process.env.JDM_DOWNLOAD_DIR) {
+      throw new Error('Resolved destination escapes download directory');
+    }
+    const { id } = queue.add(url, dest);
+    return { id };
   });
 
-  ipcMain.handle('download:pause', (_event, id) => {
-    downloader.pauseDownload(id);
+  ipcMain.handle('download:pause', (event, { id }) => { queue.pause(id); });
+  ipcMain.handle('download:resume', (event, { id }) => { queue.resume(id); });
+  ipcMain.handle('download:cancel', (event, { id }) => { queue.cancel(id); });
+  ipcMain.handle('log:get-entries', (event, { limit, level }) => logger.getEntries(limit, level));
+
+  ipcMain.handle('file:open', async (event, { dest }) => {
+    if (typeof dest !== 'string') throw new Error('dest must be a string');
+    if (!dest.startsWith(process.env.JDM_DOWNLOAD_DIR + path.sep)) {
+      throw new Error('Path is outside download directory');
+    }
+    await shell.openPath(dest);
   });
 
-  ipcMain.handle('download:resume', (_event, id) => {
-    downloader.resumeDownload(id);
-  });
+  // Forward queue events → renderer push
+  queue.on('job:progress', payload => broadcast('download:progress', payload));
+  queue.on('job:status', payload => broadcast('download:status', payload));
+
+  // Forward logger entries → renderer push
+  logger.on('entry', entry => broadcast('log:entry', entry));
 }
 
 module.exports = { registerIpcHandlers };
