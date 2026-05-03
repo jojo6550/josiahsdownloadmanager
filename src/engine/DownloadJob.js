@@ -170,10 +170,17 @@ class DownloadJob extends EventEmitter {
     }
 
     // Reset progress so the re-created manager starts fresh
+    this.totalBytes = 0;
     this.receivedBytes = 0;
     this.speedBps = 0;
     this.etaSecs = null;
     this.chunks = [];
+
+    this.emit('progress', {
+      id: this.id,
+      overall: { percent: 0, receivedBytes: 0, totalBytes: 0, speedBps: 0, etaSecs: null },
+      chunks: []
+    });
 
     this._setStatus('queued');
     return this.start(options);

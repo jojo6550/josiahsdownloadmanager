@@ -134,6 +134,16 @@ test('1. Initial state is idle, all fields have correct defaults', () => {
   assert.ok(job.createdAt instanceof Date, 'createdAt should be a Date');
 });
 
+test('1b. invalid state transitions throw', async () => {
+  const job = makeJob();
+  // idle: only enqueue() is valid
+  // start() is async so its guard surfaces as a rejected promise
+  await assert.rejects(() => job.start(), /invalid state/i);
+  assert.throws(() => job.pause(), /invalid state/i);
+  assert.throws(() => job.resume(), /invalid state/i);
+  assert.throws(() => job.cancel(), /invalid state/i);
+});
+
 test('2. enqueue() transitions to queued, emits status', () => {
   const job = makeJob();
   const statusEvents = [];
