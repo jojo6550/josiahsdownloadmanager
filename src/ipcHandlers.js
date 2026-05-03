@@ -13,14 +13,23 @@ function broadcast(channel, payload) {
   });
 }
 
+let _registered = false;
 function registerIpcHandlers() {
+  if (_registered) return;
+  _registered = true;
   // Invoke handlers (renderer → main, returns value)
-  ipcMain.handle('download:start', async (event, { url }) => {
-    let filename = path.basename(new URL(url).pathname);
-    if (!filename || filename === '/') {
-      filename = `download-${Date.now()}`;
+  ipcMain.handle('download:start', async (event, { url } = {}) => {
+    if (typeof url !== 'string') throw new Error('url must be a string');
+    let parsed;
+    try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Only http/https URLs are supported');
     }
+    let filename = path.basename(parsed.pathname).replace(/[/\\]/g, '') || `download-${Date.now()}`;
     const dest = path.join(process.env.JDM_DOWNLOAD_DIR, filename);
+    if (!dest.startsWith(process.env.JDM_DOWNLOAD_DIR + path.sep) && dest !== process.env.JDM_DOWNLOAD_DIR) {
+      throw new Error('Resolved destination escapes download directory');
+    }
     const { id } = queue.add(url, dest);
     return { id };
   });

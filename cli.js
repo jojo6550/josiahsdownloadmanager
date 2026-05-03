@@ -31,7 +31,7 @@ function resolveDest(url, outputArg) {
   }
 
   // If output ends with separator or is an existing directory — use it as a dir
-  if (outputArg.endsWith('/') || outputArg.endsWith(path.sep) || fs.existsSync(outputArg) && fs.statSync(outputArg).isDirectory()) {
+  if (outputArg.endsWith('/') || outputArg.endsWith(path.sep) || (fs.existsSync(outputArg) && fs.statSync(outputArg).isDirectory())) {
     return path.join(outputArg, urlBasename);
   }
 
@@ -65,7 +65,8 @@ function main() {
   let speed = 0;
 
   if (!args.quiet) {
-    queue.on('job:progress', ({ percent, received, total }) => {
+    queue.on('job:progress', ({ overall }) => {
+      const { percent, receivedBytes: received, totalBytes: total, speedBps, etaSecs } = overall;
       const now = Date.now();
       const dt = (now - lastTime) / 1000;
       if (dt >= 0.25) {
@@ -77,7 +78,7 @@ function main() {
       const pct = Math.round(percent || 0);
       const speedStr = `${formatBytes(speed)}/s`;
       const sizeStr = total
-        ? `${formatBytes(received)}/${formatBytes(total)} MB`
+        ? `${formatBytes(received)}/${formatBytes(total)}`
         : formatBytes(received);
 
       const etaSec = speed > 0 && total ? Math.round((total - received) / speed) : null;
