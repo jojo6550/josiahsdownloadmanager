@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   resumeDownload: (id) => ipcRenderer.invoke('download:resume', { id }),
   cancelDownload: (id) => ipcRenderer.invoke('download:cancel', { id }),
   getLogEntries: (limit, level) => ipcRenderer.invoke('log:get-entries', { limit, level }),
+  openFile: (dest) => ipcRenderer.invoke('file:open', { dest }),
   onProgress: (cb) => {
     const wrapped = (e, data) => cb(data);
     ipcRenderer.on('download:progress', wrapped);

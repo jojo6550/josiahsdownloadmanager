@@ -13,6 +13,8 @@ const activeFilters = new Set(['DEBUG', 'INFO', 'WARN', 'ERROR']);
 /** All rendered log entries (for re-filter). @type {HTMLElement[]} */
 const allLogEntries = [];
 
+const MAX_LOG_ENTRIES = 2000;
+
 // ============================================================
 // Utility
 // ============================================================
@@ -125,7 +127,7 @@ function updateThreadRow(containerId, n, percent, speedBps) {
   }
 
   const fill = document.getElementById(`tf-${containerId}-${n}`);
-  if (fill) fill.style.width = `${percent}%`;
+  if (fill) fill.style.width = `${Math.min(100, Math.max(0, percent || 0))}%`;
 
   const speedEl = document.getElementById(`ts-${containerId}-${n}`);
   if (speedEl) speedEl.textContent = speedBps > 0 ? `${formatBytes(speedBps)}/s` : '–';
@@ -167,11 +169,13 @@ function handleProgress(data) {
   const job = jobs.get(id);
   job.speedBps = overall.speedBps || 0;
 
+  const pct = Math.min(100, Math.max(0, overall.percent || 0));
+
   const overallFill = document.getElementById(`overall-bar-${id}`);
-  if (overallFill) overallFill.style.width = `${overall.percent}%`;
+  if (overallFill) overallFill.style.width = `${pct}%`;
 
   const pctEl = document.getElementById(`pct-${id}`);
-  if (pctEl) pctEl.textContent = `${overall.percent.toFixed(0)}%`;
+  if (pctEl) pctEl.textContent = `${pct.toFixed(0)}%`;
 
   const speedEl = document.getElementById(`speed-${id}`);
   if (speedEl) speedEl.textContent = `${formatBytes(overall.speedBps)}/s`;
@@ -356,6 +360,14 @@ function renderLogEntry(entry) {
   logEntries.appendChild(el);
   allLogEntries.push(el);
 
+  // Cap DOM nodes and array at MAX_LOG_ENTRIES
+  if (allLogEntries.length > MAX_LOG_ENTRIES) {
+    allLogEntries.splice(0, allLogEntries.length - MAX_LOG_ENTRIES);
+    if (logEntries.children.length > MAX_LOG_ENTRIES) {
+      logEntries.removeChild(logEntries.firstChild);
+    }
+  }
+
   // Auto-scroll if user is near the bottom (within 60px)
   const isNearBottom = logEntries.scrollHeight - logEntries.scrollTop - logEntries.clientHeight < 60;
   if (isNearBottom) {
@@ -415,21 +427,28 @@ function initDownloadButton() {
       return;
     }
 
-    const result = await window.api.startDownload(url);
-    if (!result) return;
+    downloadBtn.disabled = true;
+    try {
+      const result = await window.api.startDownload(url);
+      if (!result) return;
 
-    const { id } = result;
+      const { id } = result;
 
-    urlInput.value = '';
+      urlInput.value = '';
 
-    const el = createCardEl(id);
-    const activeSection = document.getElementById('downloads-active');
-    activeSection.appendChild(el);
+      const el = createCardEl(id);
+      const activeSection = document.getElementById('downloads-active');
+      activeSection.appendChild(el);
 
-    jobs.set(id, { el, status: 'downloading', filename: '', speedBps: 0 });
+      jobs.set(id, { el, status: 'downloading', filename: '', speedBps: 0 });
 
-    updateCounts();
-    updateTopbarStats();
+      updateCounts();
+      updateTopbarStats();
+    } catch (err) {
+      console.error('Failed to start download:', err);
+    } finally {
+      downloadBtn.disabled = false;
+    }
   }
 }
 

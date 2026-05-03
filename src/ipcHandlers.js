@@ -1,6 +1,6 @@
 'use strict';
 
-const { ipcMain, BrowserWindow } = require('electron');
+const { ipcMain, BrowserWindow, shell } = require('electron');
 const path = require('node:path');
 const DownloadQueue = require('./engine/DownloadQueue');
 const logger = require('./logger/Logger');
@@ -38,6 +38,11 @@ function registerIpcHandlers() {
   ipcMain.handle('download:resume', (event, { id }) => { queue.resume(id); });
   ipcMain.handle('download:cancel', (event, { id }) => { queue.cancel(id); });
   ipcMain.handle('log:get-entries', (event, { limit, level }) => logger.getEntries(limit, level));
+
+  ipcMain.handle('file:open', async (event, { dest }) => {
+    if (typeof dest !== 'string') throw new Error('dest must be a string');
+    await shell.openPath(dest);
+  });
 
   // Forward queue events → renderer push
   queue.on('job:progress', payload => broadcast('download:progress', payload));
