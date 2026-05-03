@@ -271,14 +271,12 @@ test('follows 302 redirect', async () => {
   const to = 9;
   const dest = destPath('redirect-chunk.tmp');
 
-  const req = new RangeRequest({
+  const req = makeReq({
     url: `http://127.0.0.1:${port}/redirect`,
     from,
     to,
     dest,
-    id: 'job-redir',
     chunkIndex: 0,
-    _retryDelays: [10, 20, 40],
   });
 
   await req.start();
@@ -286,4 +284,28 @@ test('follows 302 redirect', async () => {
   const written = fs.readFileSync(dest);
   const expected = FILE_BODY.slice(from, to + 1);
   assert.deepEqual(written, expected);
+});
+
+test('cancel() during retry backoff window aborts the download', async () => {
+  // Server always closes the connection immediately (network error on every attempt)
+  requestHandler = (req, _res) => {
+    req.socket.destroy();
+  };
+
+  try {
+    // Use long retry delays so we have time to cancel before the retry fires
+    const req = makeReq({ _retryDelays: [200, 400, 800] });
+
+    const startPromise = req.start();
+
+    // Wait briefly for the first attempt to fail and enter the backoff window
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Cancel while the retry timer is still pending
+    req.cancel();
+
+    await assert.rejects(() => startPromise, /Cancelled/);
+  } finally {
+    requestHandler = null;
+  }
 });

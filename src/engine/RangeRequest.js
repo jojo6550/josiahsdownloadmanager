@@ -36,6 +36,7 @@ class RangeRequest extends EventEmitter {
     this._cancelled = false;
     this._currentReq = null;
     this._currentRes = null;
+    this._retryAttempt = 0;
     // Stored so cancel() can immediately reject the pending promise
     this._reject = null;
   }
@@ -136,7 +137,14 @@ class RangeRequest extends EventEmitter {
       // Ensure destination directory exists
       const dir = path.dirname(this._dest);
       if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+        try {
+          fs.mkdirSync(dir, { recursive: true });
+        } catch (err) {
+          res.destroy();
+          this._currentRes = null;
+          reject(err);
+          return;
+        }
       }
 
       const fileStream = fs.createWriteStream(this._dest);
@@ -173,6 +181,7 @@ class RangeRequest extends EventEmitter {
         if (this._cancelled || attemptSettled) return;
         attemptSettled = true;
         this._currentRes = null;
+        this._currentReq = null;
         this.emit('done', { chunkIndex: this._chunkIndex, dest: this._dest });
         resolve();
       });
@@ -191,7 +200,7 @@ class RangeRequest extends EventEmitter {
   }
 
   _onNetworkError(err, url, redirectCount, resolve, reject) {
-    const attempt = this._retryAttempt || 0;
+    const attempt = this._retryAttempt;
     this._retryAttempt = attempt + 1;
 
     if (attempt < this._retryDelays.length) {
