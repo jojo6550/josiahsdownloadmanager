@@ -38,6 +38,9 @@ class ChunkManager extends EventEmitter {
     this._singleStreamReq = null;
     this._singleStreamRes = null;
 
+    // For HEAD probe cancellation
+    this._headReq = null;
+
     // Stored reject for cancel() to call
     this._startReject = null;
   }
@@ -74,6 +77,12 @@ class ChunkManager extends EventEmitter {
     if (this._singleStreamReq) {
       this._singleStreamReq.destroy();
       this._singleStreamReq = null;
+    }
+
+    // Cancel HEAD probe if active
+    if (this._headReq) {
+      this._headReq.destroy();
+      this._headReq = null;
     }
 
     const err = new Error('Cancelled');
@@ -138,6 +147,7 @@ class ChunkManager extends EventEmitter {
 
       // Handle redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        this._headReq = null;
         if (redirectCount >= MAX_REDIRECTS) {
           return reject(new Error(`Too many redirects (>${MAX_REDIRECTS})`));
         }
@@ -146,6 +156,7 @@ class ChunkManager extends EventEmitter {
       }
 
       if (res.statusCode !== 200 && res.statusCode !== 204) {
+        this._headReq = null;
         return reject(new Error(`HEAD request failed with HTTP ${res.statusCode}`));
       }
 
@@ -165,10 +176,14 @@ class ChunkManager extends EventEmitter {
         });
       }
 
+      this._headReq = null;
       resolve({ chunked, totalBytes: contentLength });
     });
 
+    this._headReq = req;
+
     req.on('error', (err) => {
+      this._headReq = null;
       if (this._cancelled) return;
       reject(err);
     });
@@ -180,7 +195,7 @@ class ChunkManager extends EventEmitter {
    * Run in chunked mode: split into N chunks, parallel RangeRequests, merge.
    */
   async _runChunked(totalBytes, resolve, reject) {
-    const chunkCount = this._chunkCount;
+    const chunkCount = Math.min(this._chunkCount, totalBytes);
     const chunkSize = Math.floor(totalBytes / chunkCount);
 
     // Build chunk ranges
@@ -244,11 +259,13 @@ class ChunkManager extends EventEmitter {
           state.speedBps = (bytesDelta / elapsed) * 1000;
         }
 
+        // Update baseline on every event so speed calc is always accurate
+        state.lastReportedBytes = state.bytesReceived;
+        state.lastReportedTime = now;
+
         // Debounce per-chunk progress to at most once per 250ms
         if (now - lastProgressEmit[idx] >= PROGRESS_DEBOUNCE_MS) {
           lastProgressEmit[idx] = now;
-          state.lastReportedBytes = state.bytesReceived;
-          state.lastReportedTime = now;
           this._emitChunkedProgress(totalBytes, chunkState);
         }
       });
@@ -259,7 +276,6 @@ class ChunkManager extends EventEmitter {
     this._activeRequests = requests;
 
     // Start all in parallel
-    let allSettled = false;
     const startPromises = requests.map((rr, i) => {
       logger.debug('ChunkManager: starting chunk', { chunkIndex: i });
       return rr.start();
@@ -269,12 +285,10 @@ class ChunkManager extends EventEmitter {
       await Promise.all(startPromises);
     } catch (err) {
       if (this._cancelled) return;
-      allSettled = true;
       return reject(err);
     }
 
     if (this._cancelled) return;
-    allSettled = true;
     this._activeRequests = [];
 
     // Final progress emit (100%)
@@ -322,6 +336,7 @@ class ChunkManager extends EventEmitter {
 
       const destStream = fs.createWriteStream(this._dest);
       let chunkIndex = 0;
+      let rejected = false;
 
       const pipeNext = () => {
         if (chunkIndex >= chunks.length) {
@@ -335,6 +350,9 @@ class ChunkManager extends EventEmitter {
         const srcStream = fs.createReadStream(tmpFile);
 
         srcStream.on('error', (err) => {
+          if (rejected) return;
+          rejected = true;
+          srcStream.destroy();
           destStream.destroy();
           reject(err);
         });
@@ -347,6 +365,8 @@ class ChunkManager extends EventEmitter {
       };
 
       destStream.on('error', (err) => {
+        if (rejected) return;
+        rejected = true;
         reject(err);
       });
 
@@ -369,22 +389,10 @@ class ChunkManager extends EventEmitter {
    * Single-stream fallback: GET → pipe directly to dest.
    */
   _runSingleStream(totalBytes, resolve, reject) {
-    return new Promise((resolveInner, rejectInner) => {
-      const done = (err) => {
-        if (err) {
-          reject(err);
-          rejectInner(err);
-        } else {
-          resolve({ dest: this._dest, totalBytes });
-          resolveInner();
-        }
-      };
-
-      this._doSingleStream(this._url, 0, totalBytes, done);
-    });
+    this._doSingleStream(this._url, 0, totalBytes, resolve, reject);
   }
 
-  _doSingleStream(url, redirectCount, totalBytes, done) {
+  _doSingleStream(url, redirectCount, totalBytes, resolve, reject) {
     if (this._cancelled) return;
 
     const parsed = new URL(url);
@@ -410,16 +418,16 @@ class ChunkManager extends EventEmitter {
         res.destroy();
         this._singleStreamRes = null;
         if (redirectCount >= MAX_REDIRECTS) {
-          return done(new Error(`Too many redirects (>${MAX_REDIRECTS})`));
+          return reject(new Error(`Too many redirects (>${MAX_REDIRECTS})`));
         }
         const nextUrl = new URL(res.headers.location, url).toString();
-        return this._doSingleStream(nextUrl, redirectCount + 1, totalBytes, done);
+        return this._doSingleStream(nextUrl, redirectCount + 1, totalBytes, resolve, reject);
       }
 
       if (res.statusCode !== 200) {
         res.destroy();
         this._singleStreamRes = null;
-        return done(new Error(`HTTP ${res.statusCode}`));
+        return reject(new Error(`HTTP ${res.statusCode}`));
       }
 
       // Use Content-Length from GET response if we didn't get it from HEAD
@@ -436,7 +444,7 @@ class ChunkManager extends EventEmitter {
         } catch (err) {
           res.destroy();
           this._singleStreamRes = null;
-          return done(err);
+          return reject(err);
         }
       }
 
@@ -455,14 +463,15 @@ class ChunkManager extends EventEmitter {
         settled = true;
         destStream.destroy();
         this._singleStreamRes = null;
-        done(err);
+        reject(err);
       });
 
       destStream.on('error', (err) => {
         if (this._cancelled || settled) return;
         settled = true;
+        destStream.destroy();
         this._singleStreamRes = null;
-        done(err);
+        reject(err);
       });
 
       destStream.on('finish', () => {
@@ -472,7 +481,7 @@ class ChunkManager extends EventEmitter {
         this._singleStreamReq = null;
         logger.info('ChunkManager: single-stream download complete', { dest: this._dest, totalBytes: receivedBytes });
         this.emit('done', { dest: this._dest, totalBytes: receivedBytes });
-        done(null);
+        resolve({ dest: this._dest, totalBytes: receivedBytes });
       });
 
       res.pipe(destStream);
@@ -482,7 +491,7 @@ class ChunkManager extends EventEmitter {
 
     req.on('error', (err) => {
       if (this._cancelled) return;
-      done(err);
+      reject(err);
     });
 
     req.end();
