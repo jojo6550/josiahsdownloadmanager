@@ -41,6 +41,9 @@ function registerIpcHandlers() {
 
   ipcMain.handle('file:open', async (event, { dest }) => {
     if (typeof dest !== 'string') throw new Error('dest must be a string');
+    if (!dest.startsWith(process.env.JDM_DOWNLOAD_DIR + path.sep)) {
+      throw new Error('Path is outside download directory');
+    }
     await shell.openPath(dest);
   });
 

@@ -160,7 +160,7 @@ function updateTopbarStats() {
 // ============================================================
 
 /**
- * @param {{ id: string, overall: { percent: number, speedBps: number, etaSec: number, receivedBytes: number, totalBytes: number }, chunks: Array<{ index: number, percent: number, speedBps: number }> }} data
+ * @param {{ id: string, overall: { percent: number, speedBps: number, etaSecs: number, receivedBytes: number, totalBytes: number }, chunks: Array<{ n: number, percent: number, speedBps: number }> }} data
  */
 function handleProgress(data) {
   const { id, overall, chunks } = data;
@@ -182,7 +182,7 @@ function handleProgress(data) {
 
   const etaEl = document.getElementById(`eta-${id}`);
   if (etaEl) {
-    etaEl.textContent = overall.etaSec > 0 ? `ETA ${overall.etaSec}s` : 'ETA –';
+    etaEl.textContent = overall.etaSecs > 0 ? `ETA ${overall.etaSecs}s` : 'ETA –';
   }
 
   const sizeEl = document.getElementById(`size-${id}`);
@@ -193,7 +193,7 @@ function handleProgress(data) {
   const threadsId = `threads-${id}`;
   if (chunks && Array.isArray(chunks)) {
     chunks.forEach((chunk) => {
-      updateThreadRow(threadsId, chunk.index, chunk.percent, chunk.speedBps || 0);
+      updateThreadRow(threadsId, chunk.n, chunk.percent, chunk.speedBps || 0);
     });
   }
 

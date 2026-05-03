@@ -410,7 +410,31 @@ test('9. cancel() from downloading frees slot and starts next pending job', asyn
   assert.equal(queue._activeIds.size, 0);
 });
 
-test('10. getJobs() returns all jobs including completed ones', async () => {
+test('10. cancel() from paused frees slot and emits cancelled status', async () => {
+  requestHandler = slowHandler(5);
+
+  const queue = makeQueue({ maxConcurrent: 1 });
+  const { id: id1, job: job1 } = queue.add(fileUrl(), destPath());
+
+  await waitForStatus(job1, 'downloading', 3000);
+
+  // Use fast server for subsequent jobs
+  requestHandler = null;
+
+  queue.pause(id1);
+  await waitForStatus(job1, 'paused', 3000);
+  assert.equal(job1.status, 'paused');
+
+  // Cancel from paused state — should work
+  queue.cancel(id1);
+
+  await waitForStatus(job1, 'cancelled', 3000);
+  assert.equal(job1.status, 'cancelled');
+  assert.ok(!queue._activeIds.has(id1), 'cancelled job not in activeIds');
+  assert.ok(!queue._pendingIds.includes(id1), 'cancelled job not in pendingIds');
+});
+
+test('11. getJobs() returns all jobs including completed ones', async () => {
   const queue = makeQueue({ maxConcurrent: 2 });
 
   const { job: job1 } = queue.add(fileUrl(), destPath());
@@ -428,3 +452,4 @@ test('10. getJobs() returns all jobs including completed ones', async () => {
   assert.equal(all.length, 3, 'getJobs() should return all 3 jobs');
   assert.ok(all.every((j) => j.status === 'completed'), 'all jobs should be completed');
 });
+

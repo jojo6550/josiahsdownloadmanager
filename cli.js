@@ -98,7 +98,7 @@ function main() {
       }
       process.exit(0);
     } else if (status === 'error') {
-      process.stderr.write(`\nError: ${error || 'unknown error'}\n`);
+      process.stderr.write(`\nError: ${(error && error.message) || error || 'unknown error'}\n`);
       process.exit(1);
     }
   });

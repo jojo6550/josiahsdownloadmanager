@@ -103,7 +103,7 @@ class DownloadQueue extends EventEmitter {
     const job = this._jobs.get(id);
     if (!job) return;
 
-    if (job.status === 'queued' || job.status === 'downloading') {
+    if (job.status === 'queued' || job.status === 'downloading' || job.status === 'paused') {
       job.cancel();
       this._activeIds.delete(id);
       const pendingIdx = this._pendingIds.indexOf(id);

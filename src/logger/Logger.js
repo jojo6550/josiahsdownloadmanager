@@ -104,7 +104,7 @@ class Logger extends EventEmitter {
       if (!Object.values(LEVELS).includes(level)) throw new Error('Invalid log level: ' + level);
       this._minLevel = level;
     } else {
-      this._minLevel = level;
+      throw new TypeError('level must be a string or number');
     }
   }
 

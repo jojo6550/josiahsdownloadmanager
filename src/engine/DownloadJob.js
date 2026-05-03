@@ -190,7 +190,7 @@ class DownloadJob extends EventEmitter {
    * Cancel from queued or downloading state.
    */
   cancel() {
-    if (this.status !== 'queued' && this.status !== 'downloading') {
+    if (this.status !== 'queued' && this.status !== 'downloading' && this.status !== 'paused') {
       throw new Error(`cancel() called from invalid state: ${this.status}`);
     }
 

@@ -285,6 +285,8 @@ class ChunkManager extends EventEmitter {
       await Promise.all(startPromises);
     } catch (err) {
       if (this._cancelled) return;
+      for (const rr of this._activeRequests) rr.cancel();
+      this._activeRequests = [];
       return reject(err);
     }
 
