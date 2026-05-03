@@ -13,16 +13,15 @@ class Logger extends EventEmitter {
     super();
     this._minLevel = LEVELS.DEBUG;
     this._logPath = null;
-    this._initialized = false;
   }
 
-  _getLogPath() {
+  _ensureLogPath() {
+    if (this._logPath) return this._logPath;
     const dir = process.env.JDM_DOWNLOAD_DIR;
     if (!dir) throw new Error('JDM_DOWNLOAD_DIR is not set');
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    return path.join(dir, 'jdm.log');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    this._logPath = path.join(dir, 'jdm.log');
+    return this._logPath;
   }
 
   _rotate(logPath) {
@@ -45,7 +44,7 @@ class Logger extends EventEmitter {
   }
 
   _writeEntry(entry) {
-    const logPath = this._getLogPath();
+    const logPath = this._ensureLogPath();
     const line = JSON.stringify(entry) + '\n';
 
     // Check if rotation needed
@@ -56,7 +55,11 @@ class Logger extends EventEmitter {
       }
     }
 
-    fs.appendFileSync(logPath, line, 'utf8');
+    try {
+      fs.appendFileSync(logPath, line, 'utf8');
+    } catch (err) {
+      console.error('[JDM Logger] write error:', err.message);
+    }
   }
 
   log(level, msg, meta = {}) {
@@ -97,13 +100,16 @@ class Logger extends EventEmitter {
       const num = LEVELS[level];
       if (num === undefined) throw new Error(`Unknown level: ${level}`);
       this._minLevel = num;
+    } else if (typeof level === 'number') {
+      if (!Object.values(LEVELS).includes(level)) throw new Error('Invalid log level: ' + level);
+      this._minLevel = level;
     } else {
       this._minLevel = level;
     }
   }
 
   getEntries(limit = 100, levelFilter = null) {
-    const logPath = this._getLogPath();
+    const logPath = this._ensureLogPath();
     if (!fs.existsSync(logPath)) return [];
 
     const content = fs.readFileSync(logPath, 'utf8');
