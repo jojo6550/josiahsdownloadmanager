@@ -140,6 +140,9 @@ class RangeRequest extends EventEmitter {
       }
 
       const fileStream = fs.createWriteStream(this._dest);
+      // Guard: once this attempt is settled (via network error/retry or done), stop
+      // fileStream events from double-resolving/rejecting the outer promise.
+      let attemptSettled = false;
 
       res.on('data', (chunk) => {
         if (this._cancelled) return;
@@ -154,18 +157,21 @@ class RangeRequest extends EventEmitter {
       // Handle response stream errors (e.g. socket destroyed mid-stream)
       res.on('error', (err) => {
         if (this._cancelled) return; // cancel() already handled rejection
+        attemptSettled = true;
         fileStream.destroy();
         this._onNetworkError(err, url, redirectCount, resolve, reject);
       });
 
       fileStream.on('error', (err) => {
-        if (this._cancelled) return;
+        if (this._cancelled || attemptSettled) return;
+        attemptSettled = true;
         this.emit('error', err);
         reject(err);
       });
 
       fileStream.on('finish', () => {
-        if (this._cancelled) return;
+        if (this._cancelled || attemptSettled) return;
+        attemptSettled = true;
         this._currentRes = null;
         this.emit('done', { chunkIndex: this._chunkIndex, dest: this._dest });
         resolve();
