@@ -4,4 +4,3 @@ downloads/*
 dist/
 *.log
 .superpowers/
-.worktrees/
