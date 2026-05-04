@@ -1,9 +1,11 @@
 'use strict';
 
 const { ipcMain, BrowserWindow, shell } = require('electron');
-const path  = require('node:path');
-const queue = require('./api/queue');
+const path   = require('node:path');
+const os     = require('node:os');
+const queue  = require('./api/queue');
 const logger = require('./logger/Logger');
+const ytDlp  = require('./scraper/ytDlp');
 
 function broadcast(channel, payload) {
   BrowserWindow.getAllWindows().forEach((w) => {
@@ -35,6 +37,21 @@ function registerIpcHandlers() {
   ipcMain.handle('download:pause',  (_e, { id }) => { queue.pause(id); });
   ipcMain.handle('download:resume', (_e, { id }) => { queue.resume(id); });
   ipcMain.handle('download:cancel', (_e, { id }) => { queue.cancel(id); });
+
+  ipcMain.handle('scraper:probe', async (_e, { url } = {}) => {
+    if (typeof url !== 'string') throw new Error('url must be a string');
+    return ytDlp.probe(url);
+  });
+
+  ipcMain.handle('scraper:start', async (_e, { url, formatId } = {}) => {
+    if (typeof url !== 'string' || typeof formatId !== 'string') {
+      throw new Error('url and formatId must be strings');
+    }
+    const dir  = process.env.JDM_DOWNLOAD_DIR || path.join(os.homedir(), 'Downloads', 'JDM');
+    const dest = path.join(dir, `%(title)s.%(ext)s`);
+    const { id } = queue.addYtDlp(url, formatId, dest);
+    return { id };
+  });
   ipcMain.handle('log:get-entries', (_e, { limit, level }) => logger.getEntries(limit, level));
 
   ipcMain.handle('file:open', async (_e, { dest }) => {

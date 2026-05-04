@@ -178,6 +178,91 @@ function handleStatus({ id, status, filename, dest, error }) {
   updateStats();
 }
 
+// ─── Quality picker modal ──────────────────────────────────────────────────
+
+let _pickerState = null; // { url, formats }
+
+function fmt2(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1e6)  return `${(bytes / 1e3).toFixed(0)} KB`;
+  if (bytes < 1e9)  return `${(bytes / 1e6).toFixed(0)} MB`;
+  return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function buildFormatLabel(f) {
+  const size = f.filesize ? ` · ${fmt2(f.filesize)}` : '';
+  const note = f.note     ? ` · ${f.note}`            : '';
+  return `${f.resolution} · ${f.ext.toUpperCase()}${note}${size}`;
+}
+
+function showPicker(url, formats) {
+  // Keep only video formats; deduplicate by resolution+ext
+  const seen = new Set();
+  const videoFmts = formats.filter((f) => {
+    if (f.vcodec === 'none') return false;
+    const key = `${f.resolution}|${f.ext}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (videoFmts.length === 0) return null;
+
+  _pickerState = { url, formats: videoFmts };
+
+  const container = document.getElementById('modal-formats');
+  container.innerHTML = '';
+
+  // "Best" auto option first
+  const autoId = 'bestvideo+bestaudio/best';
+  const autoRow = document.createElement('label');
+  autoRow.className = 'fmt-row';
+  autoRow.innerHTML = `<input type="radio" name="fmt" value="${autoId}" checked /> Best (auto)`;
+  container.appendChild(autoRow);
+
+  videoFmts.forEach((f) => {
+    const formatStr = `${f.id}+bestaudio/best`;
+    const row = document.createElement('label');
+    row.className = 'fmt-row';
+    row.innerHTML = `<input type="radio" name="fmt" value="${formatStr}" /> ${buildFormatLabel(f)}`;
+    container.appendChild(row);
+  });
+
+  document.getElementById('quality-modal').hidden = false;
+  return true;
+}
+
+function hidePicker() {
+  document.getElementById('quality-modal').hidden = true;
+  _pickerState = null;
+}
+
+function initPicker() {
+  document.getElementById('modal-close').onclick = hidePicker;
+
+  document.getElementById('modal-download').onclick = async () => {
+    if (!_pickerState) return;
+    const selected = document.querySelector('input[name="fmt"]:checked');
+    if (!selected) return;
+
+    const { url } = _pickerState;
+    const formatId = selected.value;
+    hidePicker();
+
+    try {
+      const { id } = await window.api.startYtDlp(url, formatId);
+      const name   = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+      const card   = makeCard(id, name);
+      document.getElementById('downloads-active').prepend(card);
+      jobs.set(id, { status: 'downloading', speedBps: 0, dest: null });
+      updateEmpty();
+      updateStats();
+    } catch (err) {
+      console.error('yt-dlp start failed:', err);
+    }
+  };
+}
+
 // ─── Download button ───────────────────────────────────────────────────────
 
 function initInput() {
@@ -193,6 +278,15 @@ function initInput() {
     }
     btn.disabled = true;
     try {
+      // Try yt-dlp probe first; fall back to direct download
+      let formats = null;
+      try { formats = await window.api.probeUrl(url); } catch { /* not a yt-dlp URL */ }
+
+      if (formats && formats.length > 0 && showPicker(url, formats)) {
+        input.value = '';
+        return; // picker handles the rest
+      }
+
       const { id } = await window.api.startDownload(url);
       input.value  = '';
       const name   = (() => { try { return new URL(url).pathname.split('/').pop() || new URL(url).hostname; } catch { return url; } })();
@@ -223,6 +317,7 @@ function initWindowControls() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initInput();
+  initPicker();
   initWindowControls();
   updateEmpty();
 

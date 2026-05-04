@@ -31,7 +31,7 @@ function renderBar(percent, width = 30) {
 }
 
 function parseArgs(argv) {
-  const args = { url: null, output: null, chunks: null, concurrency: null, quiet: false, help: false };
+  const args = { url: null, output: null, chunks: null, concurrency: null, quiet: false, help: false, format: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-o' || a === '--output') {
@@ -40,6 +40,8 @@ function parseArgs(argv) {
       args.chunks = Math.max(1, Math.min(32, parseInt(argv[++i], 10) || 8));
     } else if (a === '-C' || a === '--concurrency') {
       args.concurrency = Math.max(1, Math.min(16, parseInt(argv[++i], 10) || 1));
+    } else if (a === '-f' || a === '--format') {
+      args.format = argv[++i];
     } else if (a === '-q' || a === '--quiet') {
       args.quiet = true;
     } else if (a === '-h' || a === '--help') {

@@ -4,7 +4,8 @@
       "Bash(git branch *)",
       "Bash(git worktree *)",
       "Bash(gh --version)",
-      "PowerShell(gh auth *)"
+      "PowerShell(gh auth *)",
+      "PowerShell(git *)"
     ]
   }
 }

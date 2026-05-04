@@ -3,6 +3,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  probeUrl:       (url)                    => ipcRenderer.invoke('scraper:probe', { url }),
+  startYtDlp:     (url, formatId)          => ipcRenderer.invoke('scraper:start', { url, formatId }),
   startDownload:  (url)          => ipcRenderer.invoke('download:start',  { url }),
   pauseDownload:  (id)           => ipcRenderer.invoke('download:pause',  { id }),
   resumeDownload: (id)           => ipcRenderer.invoke('download:resume', { id }),

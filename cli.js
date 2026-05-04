@@ -16,6 +16,7 @@ Options:
   -o, --output <path>      Output file or directory  (default: ~/Downloads/JDM/)
   -c, --chunks <n>         Parallel chunks per file  (default: 8, max: 32)
   -C, --concurrency <n>    Simultaneous downloads    (default: 1, max: 16)
+  -f, --format <id>        yt-dlp format string (skips picker, e.g. "bestvideo+bestaudio")
   -q, --quiet              Suppress progress output
   -h, --help               Show this help
 
@@ -44,6 +45,106 @@ function resolveDest(url, outputArg) {
   }
 
   return outputArg;
+}
+
+// ─── yt-dlp mode ───────────────────────────────────────────────────────────
+
+async function pickFormat(formats, quiet) {
+  const videoFmts = (() => {
+    const seen = new Set();
+    return formats.filter((f) => {
+      if (f.vcodec === 'none') return false;
+      const key = `${f.resolution}|${f.ext}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
+
+  if (videoFmts.length === 0 || quiet || !process.stdin.isTTY) {
+    return 'bestvideo+bestaudio/best';
+  }
+
+  console.log('\nAvailable formats:');
+  console.log('  0) Best (auto)');
+  videoFmts.forEach((f, i) => {
+    const size = f.filesize ? ` [${formatBytes(f.filesize)}]` : '';
+    console.log(`  ${i + 1}) ${f.resolution} · ${f.ext.toUpperCase()}${f.note ? ` · ${f.note}` : ''}${size}`);
+  });
+
+  const readline = require('node:readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  return new Promise((resolve) => {
+    rl.question('\nSelect [0]: ', (answer) => {
+      rl.close();
+      const n = parseInt(answer.trim(), 10);
+      if (!n || n < 1 || n > videoFmts.length) return resolve('bestvideo+bestaudio/best');
+      resolve(`${videoFmts[n - 1].id}+bestaudio/best`);
+    });
+  });
+}
+
+async function runYtDlp(args) {
+  const ytDlp = require('./src/scraper/ytDlp');
+  const DownloadQueue = require('./src/engine/DownloadQueue');
+
+  if (!process.env.JDM_DOWNLOAD_DIR) {
+    process.env.JDM_DOWNLOAD_DIR = path.join(os.homedir(), 'Downloads', 'JDM');
+  }
+
+  const dir  = args.output || process.env.JDM_DOWNLOAD_DIR;
+  fs.mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, '%(title)s.%(ext)s');
+
+  let formatId = args.format;
+  if (!formatId) {
+    const formats = args._probedFormats || (() => {
+      if (!args.quiet) process.stderr.write('Fetching available formats…\n');
+      return ytDlp.probe(args.url);
+    })();
+    formatId = await pickFormat(await Promise.resolve(formats), args.quiet);
+  }
+
+  if (!args.quiet) process.stderr.write(`\nStarting download (format: ${formatId})\n`);
+
+  const queue = new DownloadQueue({ maxConcurrent: 1 });
+
+  let lastReceived = 0;
+  let lastTime     = Date.now();
+  let speed        = 0;
+  let finalDest    = dest;
+
+  if (!args.quiet) {
+    queue.on('job:progress', ({ overall }) => {
+      const { percent = 0, receivedBytes: received = 0, totalBytes: total = 0, speedBps } = overall;
+      speed = speedBps || speed;
+      const now = Date.now(); lastTime = now; lastReceived = received;
+      const pct     = Math.round(percent);
+      const sizeStr = total ? `${formatBytes(received)}/${formatBytes(total)}` : formatBytes(received);
+      const etaSec  = overall.etaSecs !== null ? overall.etaSecs : null;
+      process.stdout.write(
+        `\r${renderBar(pct)} ${pct}% | ${formatBytes(speed)}/s | ${etaSec !== null ? `ETA ${etaSec}s` : 'ETA --'} | ${sizeStr}    `
+      );
+    });
+  }
+
+  await new Promise((resolve, reject) => {
+    queue.on('job:status', ({ status, error, job }) => {
+      if (status === 'completed') {
+        if (job) finalDest = job.dest || finalDest;
+        if (!args.quiet) {
+          process.stdout.write(`\r${renderBar(100)} 100%${' '.repeat(40)}\n`);
+          console.log(`Saved: ${finalDest}`);
+        }
+        resolve();
+      } else if (status === 'error') {
+        reject(new Error((error && error.message) || error || 'unknown error'));
+      }
+    });
+
+    queue.addYtDlp(args.url, formatId, dest);
+  });
 }
 
 // ─── Standalone mode ───────────────────────────────────────────────────────
@@ -113,7 +214,26 @@ async function main() {
   }
 
   try {
-    await runStandalone(args);
+    // Probe with yt-dlp first; fall back to direct download
+    const ytDlp = require('./src/scraper/ytDlp');
+    let useYtDlp = !!args.format; // -f flag forces yt-dlp
+
+    if (!useYtDlp) {
+      try {
+        const formats = await ytDlp.probe(args.url);
+        if (formats.length > 0) useYtDlp = true;
+        // Re-use probe result — attach to args so runYtDlp can skip re-probe
+        args._probedFormats = formats;
+      } catch {
+        // Not a yt-dlp URL — direct download
+      }
+    }
+
+    if (useYtDlp) {
+      await runYtDlp(args);
+    } else {
+      await runStandalone(args);
+    }
     process.exit(0);
   } catch (err) {
     process.stderr.write(`\nError: ${err.message}\n`);

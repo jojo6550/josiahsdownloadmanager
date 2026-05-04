@@ -2,7 +2,8 @@
 
 const { randomUUID } = require('node:crypto');
 const { EventEmitter } = require('node:events');
-const DownloadJob = require('./DownloadJob');
+const DownloadJob  = require('./DownloadJob');
+const YtDlpJob     = require('./YtDlpJob');
 const logger = require('../logger/Logger');
 
 const MAX_CONCURRENT = 3;
@@ -34,6 +35,27 @@ class DownloadQueue extends EventEmitter {
    * @param {string} dest
    * @returns {{ id: string, job: DownloadJob }}
    */
+  /**
+   * Add a yt-dlp download job.
+   * @param {string} url
+   * @param {string} formatId - yt-dlp format string
+   * @param {string} dest - output path (no extension)
+   * @returns {{ id: string, job: YtDlpJob }}
+   */
+  addYtDlp(url, formatId, dest) {
+    const id  = randomUUID();
+    const job = new YtDlpJob({ url, dest, id, formatId });
+
+    job.enqueue();
+    this._jobs.set(id, job);
+    this._pendingIds.push(id);
+
+    logger.info('DownloadQueue: yt-dlp job added', { id, url, formatId, dest });
+    this._flush();
+
+    return { id, job };
+  }
+
   add(url, dest, { chunkCount } = {}) {
     const id = randomUUID();
     const job = new DownloadJob({ url, dest, id, chunkCount });
