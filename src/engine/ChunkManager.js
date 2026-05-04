@@ -157,6 +157,11 @@ class ChunkManager extends EventEmitter {
 
       if (res.statusCode !== 200 && res.statusCode !== 204) {
         this._headReq = null;
+        // Server blocked HEAD (403/405 common) — fall back to single-stream GET
+        if (res.statusCode === 403 || res.statusCode === 405) {
+          logger.warn('ChunkManager: HEAD blocked, falling back to single-stream', { url, statusCode: res.statusCode });
+          return resolve({ chunked: false, totalBytes: 0 });
+        }
         return reject(new Error(`HEAD request failed with HTTP ${res.statusCode}`));
       }
 
