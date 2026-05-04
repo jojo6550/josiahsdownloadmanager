@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(git branch *)",
-      "Bash(git worktree *)"
+      "Bash(git worktree *)",
+      "Bash(gh --version)",
+      "PowerShell(gh auth *)"
     ]
   }
 }

@@ -46,15 +46,13 @@ jdm https://example.com/page            -o ./page.html
 jdm https://example.com/               # saves as example.com.html
 ```
 
-**Daemon mode:** If the GUI overlay is running, `jdm` automatically routes downloads through it — progress shows in both the terminal and the overlay simultaneously. Falls back to standalone if GUI is not open.
-
 ### GUI Overlay
 
 ```bash
 npm start
 ```
 
-Launches a compact floating overlay (bottom-right, always-on-top). Paste a URL or use `jdm` from the terminal — downloads appear in both places. The overlay connects to the same engine as the CLI.
+Launches a compact floating overlay (bottom-right, always-on-top). Paste a URL and track progress visually. The GUI and CLI share the same download engine.
 
 ## Where files save
 
@@ -113,10 +111,11 @@ npm test
 
 ## How it works
 
-1. `npm start` launches Electron, which starts a local daemon (HTTP + SSE on port 7821) and opens the overlay window
-2. `jdm <url>` checks if the daemon is running — if yes, POSTs the download and streams progress via SSE; if no, runs the full engine standalone
-3. ChunkManager splits files into parallel chunks (default 8), merges them after completion
+1. `jdm <url>` runs the full download engine standalone — no GUI required
+2. `npm start` opens the GUI overlay; the GUI and CLI share the same underlying engine
+3. ChunkManager splits files into parallel chunks (default 8), merges them on completion
 4. Falls back to single-stream for servers that block `HEAD` or don't support `Accept-Ranges`
+5. File extension is inferred from `Content-Type` when absent from the URL
 
 ## License
 

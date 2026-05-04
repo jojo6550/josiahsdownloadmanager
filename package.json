@@ -1,14 +1,19 @@
 {
   "name": "josiahs-download-manager",
-  "version": "1.0.0-beta.1",
-  "description": "Desktop download manager built with Electron",
+  "version": "2.0.0",
+  "description": "Fast desktop download manager — parallel chunks, GUI overlay, CLI-first",
   "main": "main.js",
   "bin": {
     "jdm": "./cli.js"
   },
   "scripts": {
+    "start": "electron .",
     "dl": "node cli.js",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\"",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
   },
   "files": [
     "main.js",
