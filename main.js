@@ -1,35 +1,50 @@
 'use strict';
 
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
-const fs = require('fs');
-const os = require('os');
+const fs   = require('fs');
+const os   = require('os');
 
-// Set download dir BEFORE requiring ipcHandlers (Logger reads it at first write)
 if (!process.env.JDM_DOWNLOAD_DIR) {
   process.env.JDM_DOWNLOAD_DIR = path.join(os.homedir(), 'Downloads', 'JDM');
 }
-
-// Ensure the downloads directory exists
 fs.mkdirSync(process.env.JDM_DOWNLOAD_DIR, { recursive: true });
 
 const { registerIpcHandlers } = require('./src/ipcHandlers');
+const { startServer }         = require('./src/api/server');
+
+const WIN_W = 360;
+const WIN_H = 560;
 
 function createWindow() {
+  const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
+
   const win = new BrowserWindow({
-    width: 900,
-    height: 650,
+    width:       WIN_W,
+    height:      WIN_H,
+    x:           sw - WIN_W - 20,
+    y:           sh - WIN_H - 20,
+    frame:       false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable:   false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false,
+      nodeIntegration:  false,
     },
   });
 
   win.loadFile('renderer/index.html');
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    await startServer();
+  } catch {
+    // Daemon already running (another instance) — GUI connects as client only
+  }
+
   registerIpcHandlers();
   createWindow();
 

@@ -3,25 +3,28 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
-  startDownload: (url) => ipcRenderer.invoke('download:start', { url }),
-  pauseDownload: (id) => ipcRenderer.invoke('download:pause', { id }),
-  resumeDownload: (id) => ipcRenderer.invoke('download:resume', { id }),
-  cancelDownload: (id) => ipcRenderer.invoke('download:cancel', { id }),
-  getLogEntries: (limit, level) => ipcRenderer.invoke('log:get-entries', { limit, level }),
-  openFile: (dest) => ipcRenderer.invoke('file:open', { dest }),
+  startDownload:  (url)          => ipcRenderer.invoke('download:start',  { url }),
+  pauseDownload:  (id)           => ipcRenderer.invoke('download:pause',  { id }),
+  resumeDownload: (id)           => ipcRenderer.invoke('download:resume', { id }),
+  cancelDownload: (id)           => ipcRenderer.invoke('download:cancel', { id }),
+  getLogEntries:  (limit, level) => ipcRenderer.invoke('log:get-entries', { limit, level }),
+  openFile:       (dest)         => ipcRenderer.invoke('file:open',       { dest }),
+  minimizeWindow: ()             => ipcRenderer.invoke('window:minimize'),
+  closeWindow:    ()             => ipcRenderer.invoke('window:close'),
+
   onProgress: (cb) => {
-    const wrapped = (e, data) => cb(data);
-    ipcRenderer.on('download:progress', wrapped);
-    return () => ipcRenderer.removeListener('download:progress', wrapped);
+    const fn = (_, d) => cb(d);
+    ipcRenderer.on('download:progress', fn);
+    return () => ipcRenderer.removeListener('download:progress', fn);
   },
   onStatusChange: (cb) => {
-    const wrapped = (e, data) => cb(data);
-    ipcRenderer.on('download:status', wrapped);
-    return () => ipcRenderer.removeListener('download:status', wrapped);
+    const fn = (_, d) => cb(d);
+    ipcRenderer.on('download:status', fn);
+    return () => ipcRenderer.removeListener('download:status', fn);
   },
   onLogEntry: (cb) => {
-    const wrapped = (e, data) => cb(data);
-    ipcRenderer.on('log:entry', wrapped);
-    return () => ipcRenderer.removeListener('log:entry', wrapped);
+    const fn = (_, d) => cb(d);
+    ipcRenderer.on('log:entry', fn);
+    return () => ipcRenderer.removeListener('log:entry', fn);
   },
 });

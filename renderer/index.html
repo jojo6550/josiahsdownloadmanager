@@ -3,71 +3,45 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JDM — Josiah's Download Manager</title>
-  <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap"
-    rel="stylesheet"
-  />
+  <title>JDM</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- Topbar -->
-    <header id="topbar">
+    <!-- Titlebar / drag region -->
+    <header id="titlebar">
       <span id="logo">JDM</span>
-      <input
-        type="text"
-        id="urlInput"
-        placeholder="Paste a URL here…"
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <button id="downloadBtn" class="btn-primary">Download</button>
-      <div id="topbar-stats">
-        <span class="stat-item" id="stats-speed">0 B/s</span>
-        <span class="stat-item" id="stats-active">Active: 0</span>
-        <span class="stat-item" id="stats-queued">Queued: 0</span>
+      <div id="stats-bar">
+        <span id="stat-speed">0 B/s</span>
+        <span id="stat-active">·</span>
+      </div>
+      <div id="win-controls">
+        <button id="btn-minimize" title="Minimize">─</button>
+        <button id="btn-close"    title="Close">✕</button>
       </div>
     </header>
 
-    <!-- Body: sidebar + main -->
-    <div id="body-row">
-
-      <!-- Log Sidebar -->
-      <aside id="sidebar">
-        <div id="log-header">
-          <span id="log-title">DEBUG LOGS</span>
-          <div class="log-filters">
-            <button class="filter-pill active" data-level="DEBUG">DBG</button>
-            <button class="filter-pill active" data-level="INFO">INF</button>
-            <button class="filter-pill active" data-level="WARN">WRN</button>
-            <button class="filter-pill active" data-level="ERROR">ERR</button>
-          </div>
-        </div>
-        <div id="log-entries"></div>
-      </aside>
-
-      <!-- Downloads Main -->
-      <main id="downloads-main">
-
-        <section id="downloads-active">
-          <h2 class="section-header">Active <span class="section-count" id="count-active">0</span></h2>
-        </section>
-
-        <section id="downloads-queued">
-          <h2 class="section-header">Queued <span class="section-count" id="count-queued">0</span></h2>
-        </section>
-
-        <section id="downloads-completed">
-          <h2 class="section-header">Completed <span class="section-count" id="count-completed">0</span></h2>
-        </section>
-
-      </main>
-
+    <!-- URL input -->
+    <div id="input-row">
+      <input
+        type="text"
+        id="urlInput"
+        placeholder="Paste URL…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="downloadBtn" title="Download">↓</button>
     </div>
-  </div>
 
+    <!-- Download list -->
+    <div id="dl-list">
+      <div id="downloads-active"></div>
+      <div id="downloads-done"></div>
+    </div>
+
+  </div>
   <script src="app.js"></script>
 </body>
 </html>
