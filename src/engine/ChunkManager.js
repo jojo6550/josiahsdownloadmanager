@@ -7,6 +7,7 @@ const path = require('node:path');
 const { EventEmitter } = require('node:events');
 const RangeRequest = require('./RangeRequest');
 const logger = require('../logger/Logger');
+const { extFromMime } = require('../mimeTypes');
 
 const CHUNK_COUNT = 8;
 const TMP_DIR_SUFFIX = '.tmp';
@@ -97,10 +98,15 @@ class ChunkManager extends EventEmitter {
 
   async _run(resolve, reject) {
     try {
-      // Step 1: HEAD probe
       const headInfo = await this._headProbe();
 
       if (this._cancelled) return;
+
+      // Auto-append extension from content-type when dest has none
+      if (headInfo.contentType && !path.extname(this._dest)) {
+        const ext = extFromMime(headInfo.contentType);
+        if (ext) this._dest = `${this._dest}.${ext}`;
+      }
 
       logger.info('ChunkManager: download start', { url: this._url, dest: this._dest, chunked: headInfo.chunked });
 
@@ -115,9 +121,6 @@ class ChunkManager extends EventEmitter {
     }
   }
 
-  /**
-   * Perform a HEAD request and return { chunked, totalBytes }.
-   */
   _headProbe() {
     return new Promise((resolve, reject) => {
       this._doHeadRequest(this._url, 0, resolve, reject);
@@ -162,7 +165,7 @@ class ChunkManager extends EventEmitter {
         // Server blocked HEAD (403/405 common) — fall back to single-stream GET
         if (res.statusCode === 403 || res.statusCode === 405) {
           logger.warn('ChunkManager: HEAD blocked, falling back to single-stream', { url, statusCode: res.statusCode });
-          return resolve({ chunked: false, totalBytes: 0 });
+          return resolve({ chunked: false, totalBytes: 0, contentType: null });
         }
         return reject(new Error(`HEAD request failed with HTTP ${res.statusCode}`));
       }
@@ -184,7 +187,7 @@ class ChunkManager extends EventEmitter {
       }
 
       this._headReq = null;
-      resolve({ chunked, totalBytes: contentLength });
+      resolve({ chunked, totalBytes: contentLength, contentType: res.headers['content-type'] || null });
     });
 
     this._headReq = req;
@@ -444,6 +447,15 @@ class ChunkManager extends EventEmitter {
       const clHeader = res.headers['content-length'];
       if (clHeader) {
         totalBytes = parseInt(clHeader, 10) || totalBytes;
+      }
+
+      // Auto-append extension from GET content-type when dest has none (e.g. HEAD was blocked)
+      if (!path.extname(this._dest)) {
+        const ct = res.headers['content-type'];
+        if (ct) {
+          const ext = extFromMime(ct);
+          if (ext) this._dest = `${this._dest}.${ext}`;
+        }
       }
 
       // Ensure dest directory exists

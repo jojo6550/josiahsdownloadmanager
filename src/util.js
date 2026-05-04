@@ -31,16 +31,20 @@ function renderBar(percent, width = 30) {
 }
 
 function parseArgs(argv) {
-  const args = { url: null, output: null, quiet: false, help: false };
+  const args = { url: null, output: null, chunks: null, concurrency: null, quiet: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-o' || a === '--output') {
       args.output = argv[++i];
+    } else if (a === '-c' || a === '--chunks') {
+      args.chunks = Math.max(1, Math.min(32, parseInt(argv[++i], 10) || 8));
+    } else if (a === '-C' || a === '--concurrency') {
+      args.concurrency = Math.max(1, Math.min(16, parseInt(argv[++i], 10) || 1));
     } else if (a === '-q' || a === '--quiet') {
       args.quiet = true;
     } else if (a === '-h' || a === '--help') {
       args.help = true;
-    } else if (!args.url) {
+    } else if (!a.startsWith('-') && !args.url) {
       args.url = a;
     }
   }

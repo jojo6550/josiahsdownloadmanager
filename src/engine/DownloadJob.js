@@ -16,12 +16,13 @@ class DownloadJob extends EventEmitter {
    * @param {string} opts.dest  - output file path
    * @param {string} opts.id    - unique job ID
    */
-  constructor({ url, dest, id }) {
+  constructor({ url, dest, id, chunkCount }) {
     super();
 
     this.id = id;
     this.url = url;
     this.dest = dest;
+    this._chunkCount = chunkCount || null;
 
     this.status = 'idle';
     this.filename = null;
@@ -69,7 +70,7 @@ class DownloadJob extends EventEmitter {
       url: this.url,
       dest: this.dest,
       id: this.id,
-      _chunkCount: options._chunkCount,
+      _chunkCount: options._chunkCount || this._chunkCount,
       _retryDelays: options._retryDelays,
     });
     this._chunkManager = cm;
@@ -110,8 +111,9 @@ class DownloadJob extends EventEmitter {
       this.emit('chunk-progress', progressPayload);
     });
 
-    cm.on('done', () => {
+    cm.on('done', ({ dest } = {}) => {
       if (this._chunkManager !== cm) return;
+      if (dest) this.dest = dest;
       this._chunkManager = null;
       this._setStatus('completed');
     });

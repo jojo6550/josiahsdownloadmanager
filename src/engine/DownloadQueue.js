@@ -34,9 +34,9 @@ class DownloadQueue extends EventEmitter {
    * @param {string} dest
    * @returns {{ id: string, job: DownloadJob }}
    */
-  add(url, dest) {
+  add(url, dest, { chunkCount } = {}) {
     const id = randomUUID();
-    const job = new DownloadJob({ url, dest, id });
+    const job = new DownloadJob({ url, dest, id, chunkCount });
 
     job.enqueue();
 
@@ -149,7 +149,7 @@ class DownloadQueue extends EventEmitter {
     };
 
     const onStatus = (payload) => {
-      this.emit('job:status', { id, ...payload });
+      this.emit('job:status', { id, job, ...payload });
 
       const { status } = payload;
       if (status === 'completed') {
