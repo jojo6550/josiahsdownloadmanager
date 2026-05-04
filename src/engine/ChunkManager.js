@@ -12,6 +12,7 @@ const CHUNK_COUNT = 8;
 const TMP_DIR_SUFFIX = '.tmp';
 const MAX_REDIRECTS = 5;
 const PROGRESS_DEBOUNCE_MS = 250;
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 class ChunkManager extends EventEmitter {
   /**
@@ -134,6 +135,7 @@ class ChunkManager extends EventEmitter {
       port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
       path: parsed.pathname + parsed.search,
       method: 'HEAD',
+      headers: { 'User-Agent': USER_AGENT },
     };
 
     const req = protocol.request(reqOptions, (res) => {
@@ -410,6 +412,7 @@ class ChunkManager extends EventEmitter {
       port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
       path: parsed.pathname + parsed.search,
       method: 'GET',
+      headers: { 'User-Agent': USER_AGENT },
     };
 
     const req = protocol.request(reqOptions, (res) => {
