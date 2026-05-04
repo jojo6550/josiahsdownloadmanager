@@ -54,7 +54,12 @@ function registerIpcHandlers() {
   });
 
   queue.on('job:progress', (p) => broadcast('download:progress', p));
-  queue.on('job:status',   (p) => broadcast('download:status',   p));
+  queue.on('job:status', ({ id, status, filename, dest, error }) => {
+    broadcast('download:status', {
+      id, status, filename, dest,
+      error: error instanceof Error ? error.message : error,
+    });
+  });
   logger.on('entry',       (e) => broadcast('log:entry',         e));
 }
 
