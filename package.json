@@ -1,6 +1,6 @@
 {
   "name": "josiahs-download-manager",
-  "version": "1.0.0",
+  "version": "1.0.0-beta.1",
   "description": "Desktop download manager built with Electron",
   "main": "main.js",
   "bin": {
